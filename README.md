@@ -61,7 +61,7 @@ Comunicación:
 - **Framework**: Express
 - **Base de datos**: MongoDB + Mongoose
 - **Autenticación**: `jsonwebtoken`
-- **Seguridad de contraseñas**: `bcrypt`
+- **Seguridad de contraseñas**: `bcryptjs`
 - **Validación de requests**: `express-validator`
 - **CORS y cookies**: `cors`, `cookie-parser`
 - **Email transaccional**: `nodemailer`
@@ -96,31 +96,49 @@ uptask-backend-cookies/
 │   │   ├── types/
 │   │   ├── views/
 │   │   └── router.tsx
+│   ├── Dockerfile
 │   └── package.json
-└── server/
-    ├── src/
-    │   ├── config/
-    │   ├── controllers/
-    │   ├── emails/
-    │   ├── middlewares/
-    │   ├── models/
-    │   ├── routes/
-    │   ├── utils/
-    │   ├── index.ts
-    │   └── server.ts
-    └── package.json
+├── server/
+│   ├── src/
+│   │   ├── config/
+│   │   ├── controllers/
+│   │   ├── emails/
+│   │   ├── middlewares/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── utils/
+│   │   ├── index.ts
+│   │   └── server.ts
+│   ├── Dockerfile
+│   └── package.json
+└── infra/
+    ├── docker-compose.yml
+    └── .env
 ```
 
 ## Variables de Entorno
 
-### Backend (`server/.env`)
+El proyecto usa **tres** archivos `.env`, cada uno consumido por una herramienta distinta. Ninguno se versiona (están en `.gitignore`).
 
-Definir al menos:
+### Orquestación (`infra/.env`)
+
+Lo lee Docker Compose para interpolar el `docker-compose.yml` (mapeo de puertos al host).
 
 ```env
-PORT=4000
-DATABASE_URI=
-CLIENT_URL=
+SERVER_PORT=3000
+CLIENT_PORT=5173
+MONGO_PORT=27017
+```
+
+### Backend (`server/.env`)
+
+Lo lee el contenedor del servidor (vía `env_file`). Contiene la configuración y los secretos del backend.
+
+```env
+PORT=3000
+NODE_ENV=development
+DATABASE_URI=mongodb://mongo:27017/uptask
+CLIENT_URL=http://localhost:5173
 
 ACCESS_TOKEN_SECRET=
 REFRESH_TOKEN_SECRET=
@@ -131,46 +149,53 @@ SMTP_USER=
 SMTP_PASSWORD=
 ```
 
+> En `DATABASE_URI`, el host `mongo` es el nombre del servicio en Docker Compose: se resuelve dentro de la red interna de los contenedores. No uses `localhost` ahí.
+
 ### Frontend (`client/.env.local`)
 
+Lo lee Vite. Apunta al backend desde el navegador (host), por eso `localhost`.
+
 ```env
-VITE_API_URL=http://localhost:4000/api
+VITE_API_URL=http://localhost:3000/api
 ```
 
 ## Instalación y Ejecución
 
-> Recomendado: usar `pnpm` (el proyecto incluye `pnpm-lock.yaml`).
+El entorno de desarrollo está dockerizado: un solo comando levanta el frontend, el backend y MongoDB.
 
-### 1) Instalar dependencias
+### Requisitos
 
-```bash
-# Backend
-cd server
-pnpm install
+- Docker y Docker Compose.
 
-# Frontend
-cd ../client
-pnpm install
-```
+### 1) Crear los archivos `.env`
 
-### 2) Ejecutar en desarrollo
+Creá los tres archivos descritos en [Variables de Entorno](#variables-de-entorno): `infra/.env`, `server/.env` y `client/.env.local`. Completá los secretos del backend (JWT y SMTP).
 
-Terminal 1 (backend):
+### 2) Levantar el proyecto
 
 ```bash
-cd server
-pnpm dev
+cd infra
+docker compose up -d
 ```
 
-Terminal 2 (frontend):
+La primera vez construye las imágenes y descarga MongoDB (tarda unos minutos). El código se monta por bind mount: los cambios se reflejan con hot reload, sin reconstruir.
+
+| Servicio | URL |
+|----------|-----|
+| Frontend (Vite) | `http://localhost:5173` |
+| Backend (API) | `http://localhost:3000` |
+| MongoDB | `localhost:27017` |
+
+### Comandos útiles
 
 ```bash
-cd client
-pnpm dev
+docker compose up -d --build    # reconstruir tras cambiar dependencias
+docker compose logs -f server   # ver logs de un servicio en vivo
+docker compose down             # detener y borrar los contenedores
+docker compose down -v          # además borra el volumen (datos de MongoDB)
 ```
 
-Frontend por defecto: `http://localhost:5173`  
-Backend por `.env`: `http://localhost:<PORT>`
+> Instalar dependencias con `pnpm install` en tu máquina solo hace falta para el soporte del editor (IntelliSense). La aplicación corre dentro de los contenedores.
 
 ## Flujos Funcionales Clave
 
