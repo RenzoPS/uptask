@@ -1,8 +1,20 @@
-# UpTask Backend + Frontend (Cookies/JWT)
+# UpTask
 
-Aplicación full stack para gestión de proyectos y tareas, con autenticación basada en `access token` + `refresh token` (cookie `HttpOnly`) y recuperación de contraseña por token temporal.
+**Gestor de proyectos y tareas al estilo Trello o Jira: proyectos con equipos, tareas con estado y notas.** Full stack, con MongoDB, Express, React y Node.
 
-Este proyecto está basado en una capacitación de Udemy de **Juan Pablo De la Torre Valdez** y fue adaptado/extedido en esta versión para trabajar con flujo de autenticación con cookies.
+## El cambio que trae esta versión
+
+El punto del repositorio es el flujo de autenticación, que está reescrito de cero:
+
+- **El access token vive en memoria**, no en `localStorage`. `localStorage` no se usa en ningún punto de la aplicación: si un XSS entra, no hay token guardado que robar.
+- **El refresh token va en una cookie `HttpOnly`**, que JavaScript no puede leer, y es el único que sobrevive a un refresco de página.
+- **Renovación transparente.** Un interceptor de respuesta de axios detecta el 401, pide un token nuevo con la cookie y **reintenta la request original**. El usuario no se entera de que el token venció.
+- **Sin bucles infinitos.** El interceptor marca la request con `_retry` para no reintentar dos veces, y se saltea los endpoints de login y de refresco: un 401 ahí significa credenciales mal, no token vencido. Sin esa guarda, un login fallido dispara una cadena de refrescos.
+- **CORS con `credentials: true`** en el servidor y `withCredentials: true` en axios, que es lo que hace falta para que el navegador mande la cookie a otro origen.
+- **Si el refresco falla**, el cliente redirige al login en vez de quedarse en un estado roto.
+- **Recuperación de contraseña** por token temporal, que MongoDB borra solo a los 10 minutos vía índice TTL.
+
+El costo de mover el token fuera de `localStorage` es que hay que repensar CORS, el ciclo de vida del token y el manejo del 401 en el cliente. Eso es lo que resuelve esta versión.
 
 ## Tabla de Contenidos
 
@@ -221,7 +233,11 @@ docker compose down -v          # además borra el volumen (datos de MongoDB)
 
 ## Notas Técnicas
 
-- En `Token`, usar `default: Date.now` (sin paréntesis) para que `createdAt` se calcule por documento y funcione correctamente el TTL.
+- En `Token`, usar `default: Date.now` (sin paréntesis) para que `createdAt` se calcule por documento y funcione correctamente el TTL. Con paréntesis, el valor se congela al arrancar el proceso y todos los tokens comparten la misma fecha de creación.
 - El backend habilita `credentials: true` en CORS y el cliente usa `withCredentials: true` en axios para soportar refresh token por cookie.
 - El cliente redirige a login si falla el refresh token.
+
+## Créditos
+
+La base del proyecto —el dominio de proyectos, tareas, equipos y notas— viene de una capacitación de Udemy de **Juan Pablo De la Torre Valdez**. El flujo de autenticación descrito arriba es reescritura propia sobre esa base.
 
